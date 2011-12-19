@@ -1,0 +1,7 @@
+name = Flag Hidden
+description = "Hide content using a flag
+package = Indymedia
+dependencies[] = comment
+dependencies[] = flag
+core = 7.x
+version = "7.x-1.x-dev"
