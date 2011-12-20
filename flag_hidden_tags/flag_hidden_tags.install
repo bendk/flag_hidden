@@ -1,0 +1,16 @@
+<?php
+
+function flag_hidden_tags_install() {
+  // Ensure that the hidden vocabulary exists
+
+  $results = db_query("SELECT COUNT(1) FROM {taxonomy_vocabulary} WHERE machine_name='hidden'");
+
+  if($results->fetchField() == 0) {
+    $vocabulary = (object)array(
+      'name' => 'Hidden Reasons',
+      'machine_name' => 'hidden',
+      'description' => 'Reasons for hiding content',
+    );
+    taxonomy_vocabulary_save($vocabulary);
+  }
+}

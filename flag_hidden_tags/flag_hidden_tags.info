@@ -1,0 +1,7 @@
+core = "7.x"
+dependencies[] = "flag_hidden"
+dependencies[] = "taxonomy"
+description = "Set the hidden flag by tagging nodes"
+name = "Flag Hidden Tags"
+package = "Indymedia"
+version = "7.x-1.0-dev"

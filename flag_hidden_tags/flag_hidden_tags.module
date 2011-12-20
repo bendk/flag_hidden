@@ -1,0 +1,110 @@
+<?php
+
+function flag_hidden_tags_should_alter_form($node_type) {
+  $flag = flag_get_flag('hidden_node');
+  return ($flag &&
+    in_array($node_type, $flag->types) &&
+    $flag->user_access());
+}
+
+function flag_hidden_tags_form_node_form_alter(&$form, &$form_state, $form_id) {
+  if(!flag_hidden_tags_should_alter_form($form_state['node']->type)) {
+    return;
+  }
+
+  $mod_path = drupal_get_path('module', 'flag_hidden_tags');
+  $fieldset = array(
+    '#type' => 'fieldset',
+    '#title' => t('Hide/Unhide'),
+    '#group' => 'additional_settings',
+    '#attributes' => array('class' => array('flag-hidden-tags-form')),
+    '#attached' => array('js' => array($mod_path . '/js/node-form.js')),
+  );
+
+  $terms = flag_hidden_tags_get_terms();
+  if($terms) {
+    $fieldset['hidden_tags'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Hide this article by checking one or more reasons below'),
+      '#options' => $terms,
+    );
+    if(isset($form_state['node']->nid)) {
+      $defaults = flag_hidden_tags_get_active_terms($form_state['node']->nid);
+      $fieldset['hidden_tags']['#default_value'] = $defaults;
+    }
+  } else {
+    $fieldset['no-terms'] = array(
+      '#type' => 'item',
+      '#title' => t('Error!'),
+      '#markup' =>t('hidden vocabulary contains no terms!'),
+    );
+  }
+
+  $form['hidden']= $fieldset;
+}
+
+/* Get an array of terms in our vocabulory.
+ */
+function flag_hidden_tags_get_terms() {
+  $query = db_select('taxonomy_term_data', 'ttd');
+  $query->join('taxonomy_vocabulary', 'tv', 'ttd.vid = tv.vid');
+  $query->fields('ttd', array('tid', 'name'));
+  $query->condition('tv.machine_name', 'hidden', '=');;
+  $result = $query->execute();
+
+  $rv = array();
+  while ($record = $result->fetchAssoc()) {
+    $rv[$record['tid']] = t($record['name']);
+  }
+
+  return $rv;
+}
+
+/* Check a list of terms that are currently applying to a node */
+function flag_hidden_tags_get_active_terms($nid) {
+  $query = db_select('taxonomy_index', 'ti');
+  $query->join('taxonomy_term_data', 'ttd', 'ti.tid = ttd.tid');
+  $query->join('taxonomy_vocabulary', 'tv', 'ttd.vid = tv.vid');
+  $query->fields('ti', array('tid'));
+  $query->condition('tv.machine_name', 'hidden', '=');;
+  $result = $query->execute();
+
+  $rv = array();
+  while($tid = $result->fetchField()) {
+    $rv[] = $tid;
+  }
+  return $rv;
+}
+
+function flag_hidden_tags_node_insert($node) {
+  // Only save data to the table if the node is published.
+  if ($node->status && isset($node->hidden_tags) && $node->hidden_tags) {
+    $flag_action = 'unflag';
+    $query = db_insert('taxonomy_index');
+    $query->fields(array('nid', 'tid', 'sticky', 'created'));
+    foreach($node->hidden_tags as $tid => $checked) {
+      if($checked) {
+        $flag_action = 'flag';
+        $query->values(array(
+          'nid' => $node->nid,
+          'tid' => $tid,
+          'sticky' => $node->sticky,
+          'created' => $node->created,
+        ));
+      }
+    }
+    $query->execute();
+
+    $flag = flag_get_flag('hidden_node');
+    if($flag) {
+      $flag->flag($flag_action, $node->nid);
+    }
+  }
+}
+
+function flag_hidden_tags_node_update($node) {
+  // delete old tags
+  db_delete('taxonomy_index')->condition('nid', $node->nid)->execute();
+  // Insert new tags
+  flag_hidden_tags_node_insert($node);
+}
