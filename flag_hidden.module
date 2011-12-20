@@ -26,7 +26,10 @@ function flag_hidden_flag_default_flags() {
     'unflag_message' => '',
     'unflag_denied_text' => '',
     'link_type' => 'normal',
-    'roles' => array(),
+    'roles' => array(
+      'flag' => array(),
+      'unflag' => array(),
+    ),
     'show_on_page' => 0,
     'show_on_teaser' => 0,
     'show_on_form' => 0,
@@ -34,7 +37,68 @@ function flag_hidden_flag_default_flags() {
     'i18n' => 0,
     'api_version' => 2,
   );
+
+  // Exported flag: "Hidden Comment".
+  $flags['hidden_comment'] = array(
+    'content_type' => 'comment',
+    'title' => 'Hidden Comment',
+    'global' => '1',
+    'types' => array(),
+    'flag_short' => 'Hide Comment',
+    'flag_long' => '',
+    'flag_message' => '',
+    'unflag_short' => 'Unhide Comment',
+    'unflag_long' => '',
+    'unflag_message' => '',
+    'unflag_denied_text' => '',
+    'link_type' => 'normal',
+    'roles' => array(
+      'flag' => array(),
+      'unflag' => array(),
+    ),
+    'access_author' => '',
+    'show_on_comment' => 1,
+    'api_version' => 2,
+  );
+
   return $flags;
+}
+
+/*
+ * Hide hidden comments
+ */
+
+function flag_hidden_comment_view($comment, $view_mode, $langcode) {
+  $flag = flag_get_flag('hidden_comment');
+  if ($flag && $flag->is_flagged($comment->cid)) {
+    flag_hidden_hide_comment_content($comment);
+  }
+}
+
+function flag_hidden_hide_comment_content($comment) {
+
+  $fieldset = array(
+    '#type' => 'fieldset',
+    '#title' => t("@title (hidden by the editors)", array('@title' => $comment->subject)),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    // Need to manually attach/set some stuff to make this work outside of a 
+    // form
+    '#attached' => array(
+      'js' => array(
+        'misc/form.js',
+        'misc/collapse.js',
+      ),
+    ),
+    '#attributes' => array(
+      'class' => array('collapsible', 'collapsed'),
+    ),
+  );
+  $fieldset['hidden_content'] = $comment->content;
+  $comment->content = $fieldset;
+  // For some reason moving the arrays around messes up the ordering of 
+  // comment elemnts.  Manually set the weight for links to fix this.
+  $fieldset['hidden_content']['links']['#weight'] = 1;
 }
 
 /*
@@ -51,6 +115,7 @@ function flag_hidden_page_alter() {
   }
 }
 
+
 function flag_hidden_add_robots_meta_tag() {
   $element = array(
     '#tag' => 'meta',
@@ -62,20 +127,35 @@ function flag_hidden_add_robots_meta_tag() {
   drupal_add_html_head($element, 'robots-noindex');
 }
 
-function flag_hidden_page_is_hidden_node() {
-  $current_node = menu_get_object('node');
-  if($current_node) {
-    $flag = flag_get_flag('hidden_node');
-    return ($flag && $flag->is_flagged($current_node->nid));
-  }
+function flag_hidden_node_is_hidden(&$node) {
+  $flag = flag_get_flag('hidden_node');
+  return ($flag && $flag->is_flagged($node->nid));
+}
 
-  return FALSE;
+function flag_hidden_page_is_hidden_node() {
+  static $cache = null;
+  if(isset($cache)) return $cache;
+
+  $current_node = menu_get_object('node');
+  $cache = ($current_node && flag_hidden_node_is_hidden($current_node));
+  return $cache;
 }
 
 
 function flag_hidden_page_is_hidden_view() {
+  static $cache = null;
+
+  if(isset($cache)) return $cache;
+
   $page_view = views_get_page_view();
 
-  return ($page_view && $page_view->name == 'hidden_nodes');
+  $cache = ($page_view && $page_view->name == 'hidden_nodes');
+  return $cache;
 }
 
+/*
+ * Add a hidden_node variable for themes
+ */
+function flag_hidden_preprocess_page(&$variables) {
+  $variables['hidden_node'] = flag_hidden_page_is_hidden_node();
+}
